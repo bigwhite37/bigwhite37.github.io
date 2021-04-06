@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Hexo</title>
+  
+  
+  <link href="http://example.com/atom.xml" rel="self"/>
+  
+  <link href="http://example.com/"/>
+  <updated>2021-04-06T02:42:25.141Z</updated>
+  <id>http://example.com/</id>
+  
+  <author>
+    <name>John Doe</name>
+    
+  </author>
+  
+  <generator uri="https://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>Design Guidelines for High Performance RDMA Systems</title>
+    <link href="http://example.com/2021/04/06/Design-Guidelines-for-High-Performance-RDMA-Systems/"/>
+    <id>http://example.com/2021/04/06/Design-Guidelines-for-High-Performance-RDMA-Systems/</id>
+    <published>2021-04-06T02:20:17.000Z</published>
+    <updated>2021-04-06T02:42:25.141Z</updated>
+    
+    <content type="html"><![CDATA[<blockquote><p>参考：</p><ul><li><a href="https://www.usenix.org/system/files/conference/atc16/atc16_paper-kalia.pdf"><em>Design Guidelines for High Performance RDMA Systems</em></a></li><li><a href="https://www.rohitzambre.com/blog/2019/4/27/how-are-messages-transmitted-on-infiniband"><em>How does InfiniBand work?</em></a></li><li><a href="https://docs.mellanox.com/spaces/viewspace.action?key=OFEDv521040"><em>NVIDIA® MLNX_OFED Documentation Rev 5.2-1.0.4.0</em></a></li></ul></blockquote><h2 id="1-Reduce-CPU-initiated-MMIOs"><a href="#1-Reduce-CPU-initiated-MMIOs" class="headerlink" title="1 Reduce CPU-initiated MMIOs"></a>1 <em>Reduce CPU-initiated MMIOs</em></h2><p>按 <em>Design Guidelines for High Performance RDMA Systems</em>，<em>DMA</em> 性能优于 <a href="https://zh.wikipedia.org/wiki/%E5%AD%98%E5%82%A8%E5%99%A8%E6%98%A0%E5%B0%84%E8%BE%93%E5%85%A5%E8%BE%93%E5%87%BA"><em>MMIO</em></a>，所以提高性能的方法之一是<strong>减少 <em>CPU-initiated MMIOs</em></strong>。</p><p><img src="/images/dgfhprs1.jpg"></p><p><em>CPU</em> 初始化网络操作时，通过 <em>MMIO</em> 向网卡 <em>(1)</em> 发送 <em>WQE</em> 或 <em>(2)</em> 发送指向 <em>WQE</em> 的信息。我们称 <em>(1)</em> 为 <em>WQE-by-MMIO</em>（<em>Mellanow</em> 称之为 <em>BlueFlame</em>）,称 <em>(2)</em> 为 <em>Doorbell</em>。</p><p>根据 <em>figure 4</em> 可以看出 <em>BlueFlame</em> 只使用 <em>MMIO</em>，而 <em>Doorbell</em> 仅在初始时使用很小量的 <em>MMIO</em>。根据这一前提，给出两种优化方法：</p><ol><li><p><em><strong>Doorbell batching</strong></em><br>顾名思义，即一次 <em>Doorbell</em>，多个 <em>WQE</em>。具体落实到编程上，是使用 <code>ibv_post_send()</code> 或 <code>ibv_post_recv()</code> 发送 <em>WQE</em> 的链表，而非一个一个发送。</p></li><li><p><em><strong>WQE shrinking</strong></em><br>如图 <em>figure 4</em>，传输的数据（阴影部分）其实不足 <em>256B</em>，但因为 <em>cache line</em> 对齐，不得不浪费一部分带宽。所以在编程时，可以压缩要传输的对象大小或者仅使用 <em>immediate data</em>。</p></li></ol><h3 id="1-1-libmlx5-中关于-BlueFlame-的环境变量"><a href="#1-1-libmlx5-中关于-BlueFlame-的环境变量" class="headerlink" title="1.1 libmlx5 中关于 BlueFlame 的环境变量"></a>1.1 <em>libmlx5</em> 中关于 <em>BlueFlame</em> 的环境变量</h3><p>按 <a href="https://docs.mellanox.com/spaces/viewspace.action?key=OFEDv521040"><em>NVIDIA® MLNX_OFED Documentation Rev 5.2-1.0.4.0</em></a> 所描述，<em>libmlx5</em> 有如下两项相关的环境变量：</p><ul><li><p><em>MLX5_POST_SEND_PREFER_BF</em>  </p><ul><li><em>Configures every work request that can use blue flame will use blue flame</em></li><li><em>Otherwise - blue flame depends on the size of the message and inline indication in the packet</em></li></ul></li><li><p><em>MLX5_SHUT_UP_BF</em>  </p><ul><li><em>Disables blue flame feature</em></li><li><em>Otherwise - do not disable</em></li></ul></li></ul><h2 id="2-Reduce-NIC-initiated-DMAs"><a href="#2-Reduce-NIC-initiated-DMAs" class="headerlink" title="2 Reduce NIC-initiated DMAs"></a>2 <em>Reduce NIC-initiated DMAs</em></h2><p><img src="/images/dgfhprs2.jpg"></p><p><img src="/images/dgfhprs3.jpg"></p><p>主要有两种方法减少 <em>NIC-initiated DMAs</em>，一是 <em>unsignaled verbs</em>，避免 <em>completion DMA write</em>；二是 <em>payload inlining</em>，避免 <em>payload DMA read</em>。显然，第 <em>1</em> 节所述的几点会影响到这些方法。</p><blockquote><p>这部分在开发时可以分别使用 <em>unsignaled completions</em> 和 <code>IBV_SEND_INLINE</code> 以及 <em>immediate data only</em> 实现。</p></blockquote><p>网卡通常会为 <em>payload</em> 和 <em>completion</em> 单独生成 <em>DMA</em>，将对应内容分别写至应用和驱动的内存。</p><p>假设 <em>RDMA Send</em> 带着 <em>X</em> 字节的 <em>payload</em>：</p><ul><li><p><em><strong>Inline RECV</strong></em><br>如果 <em>X</em> 比较小（对 <em>Mellanox</em> 网卡而言约 <em>64</em> 字节），网卡从 <em>CQE</em> 中捕获该 <em>payload</em>，而后由驱动拷贝至应用指定的内存。<em>CPU</em>：拷贝 <em>payload</em> 是主要开销。<em>PCIe</em>：使用 <em>1</em> 次 <em>DMA</em> 而不是两次。</p></li><li><p><em><strong>Header-only RECV</strong></em><br>若 <em>X = 0</em>（如：<em>RDMA Send</em> 包仅包含 <em>header</em>，不含 <em>payload</em>），则接收端不对 <em>payload</em> 生成 <em>DMA</em>。包头里的信息包含在 <em>DMA-ed CQE</em> 里。<em>PCIe</em>：使用 <em>1</em> 次 <em>DMA</em> 而不是两次。</p></li></ul><h2 id="3-Engage-multiple-NIC-PUs-processing-unit"><a href="#3-Engage-multiple-NIC-PUs-processing-unit" class="headerlink" title="3 Engage multiple NIC PUs (processing unit)"></a>3 <em>Engage multiple NIC PUs (processing unit)</em></h2><p>通常开发时，都是尽可能少的使用 <em>QP</em>，但也不尽然如此。同一个 <em>QP</em> 上的操作由单个 <em>NIC processing unit</em> 处理可以避免跨 <em>PU</em> 同步问题。比如每颗核绑定一个 <em>QP</em>。但是 <em>PU</em> 也有可能会限制 <em>CPU</em> 的吞吐。比如应用处理的消息很小，<em>CPU</em> 处理消息速度远快于 <em>PU</em> 的速度。在这种情况下，多 <em>QP</em> 更合适。</p><h2 id="4-Avoid-contention-among-NIC-PUs"><a href="#4-Avoid-contention-among-NIC-PUs" class="headerlink" title="4 Avoid contention among NIC PUs"></a>4 <em>Avoid contention among NIC PUs</em></h2><p>需要跨 <em>QP</em> 同步的 <em>RDMA</em> 操作引入了 <em>PU</em> 间的竞争。到该论文发表为止（包括 <em>ConnecX-4</em>），网卡使用内部并发控制实现原子操作：<em>PU</em> 获取内部目标地址对应的锁，通过 <em>PCIe</em> 发出 <em>read-modify-write</em> 操作。而且原子操作同样会与非原子 <em>verbs</em> 相冲突。未来网卡可能会使用 <em>PCIe</em> 的原始事务以谋求更好的性能。</p><p>因此，由于内部的锁机制，诸如锁数量、原子地址到这些锁之间的映射等因素都很重要。而受限于 <em>NIC SRAM</em> 的大小，也将放大这些竞争。</p><h2 id="5-Avoid-NIC-cache-misses"><a href="#5-Avoid-NIC-cache-misses" class="headerlink" title="5 Avoid NIC cache misses"></a>5 <em>Avoid NIC cache misses</em></h2><p>网卡缓存未命中会触发一次 <em>PCIe</em> 读。网卡中缓存的信息包括：</p><ol><li><p><em>RDMA-registered</em> 虚拟内存地址到物理内存地址的转换<br>增大 <em>page size</em>（如：<em>2MB</em>）。</p></li><li><p><em>QP</em> 的状态<br>使用较少的 <em>QP</em>。</p></li><li><p><em>WQE</em><br>当 <em>CPU</em> 向网卡发送 <em>WQE</em> 时，会将其写入网卡的 <em>WQE</em> 缓存，而由其他的 <em>WQE</em> 可能会将该 <em>WQE</em> 踢出，所以当网卡想使用该 <em>WQE</em> 时就会出现缓存未命中。</p></li></ol><h3 id="5-1-WQE-缓存未命中"><a href="#5-1-WQE-缓存未命中" class="headerlink" title="5.1 WQE 缓存未命中"></a>5.1 <em>WQE</em> 缓存未命中</h3><p><img src="/images/dgfhprs4.jpg"></p><p><em>14</em> 个线程向服务端发起窗口大小为 <em>N</em> 的 <em>RDMA Read/Write</em>，读写内容大小为 <em>8</em> 字节，实验结果入上图，我们可以得出如下结论：</p><ul><li><p><strong>达到最佳吞吐时，最佳窗口大小不明显</strong>。<br>吞吐量并不总是随着窗口的大小增加而增长，网卡也是其中因素之一。例如，<em>N = 16</em> 和 <em>N = 512</em> 时，<em>CX3</em> 和 <em>CIB</em> 上 <em>RDMA Read</em> 的最大吞吐。</p></li><li><p><strong>高吞吐的代价可能是 <em>PCIe</em> 读</strong>。<br>例如，在 <em>CIB</em> 上，<em>RDMA Read</em> 和 <em>PCIe</em> 读随着 <em>N</em> 的增加而增加。尽管在机器上，最大的 <em>N</em> 仅表示 <em>RDMA Read</em> 的最佳吞吐，但对于其余操作，也可能得到次优的吞吐。</p></li><li><p><strong>对于 <em>RDMA Write</em>，<em>CIB</em> 网卡能承受 <em>CPU WQE</em> 插入峰值，且未发生缓存未命中</strong>。<br>另外，可能是因为 <em>RDMA Read</em> 相比于 <em>RDMA Write</em> 需要额外的网卡操作，所以这一结论在 <em>RDMA Read</em> 上不正确。</p></li></ul>]]></content>
+    
+    
+      
+      
+    <summary type="html">&lt;blockquote&gt;
+&lt;p&gt;参考：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://www.usenix.org/system/files/conference/atc16/atc16_paper-kalia.pdf&quot;&gt;&lt;em&gt;Design Guidelines </summary>
+      
+    
+    
+    
+    
+    <category term="papers" scheme="http://example.com/tags/papers/"/>
+    
+    <category term="RDMA" scheme="http://example.com/tags/RDMA/"/>
+    
+  </entry>
+  
+</feed>
