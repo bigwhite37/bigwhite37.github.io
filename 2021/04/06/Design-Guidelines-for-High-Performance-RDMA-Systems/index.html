@@ -14,6 +14,9 @@
 <h2 id="1-Reduce-CPU-initiated-MMIOs"><a href="#1-Reduce-CPU-initiated-MMIOs" class="headerlink" title="1 Reduce CPU-initiated MMIOs"></a>1 <em>Reduce CPU-initiated MMIOs</em></h2><p>按 <em>Design Guidelines for High Performance RDMA Systems</em>，<em>DMA</em> 性能优于 <a target="_blank" rel="noopener" href="https://zh.wikipedia.org/wiki/%E5%AD%98%E5%82%A8%E5%99%A8%E6%98%A0%E5%B0%84%E8%BE%93%E5%85%A5%E8%BE%93%E5%87%BA"><em>MMIO</em></a>，所以提高性能的方法之一是<strong>减少 <em>CPU-initiated MMIOs</em></strong>。</p>
 <p><img src="/images/dgfhprs1.jpg"></p>
 <p><em>CPU</em> 初始化网络操作时，通过 <em>MMIO</em> 向网卡 <em>(1)</em> 发送 <em>WQE</em> 或 <em>(2)</em> 发送指向 <em>WQE</em> 的信息。我们称 <em>(1)</em> 为 <em>WQE-by-MMIO</em>（<em>Mellanow</em> 称之为 <em>BlueFlame</em>）,称 <em>(2)</em> 为 <em>Doorbell</em>。</p>
+<blockquote>
+<p><em>(1)</em> 中，<em>WQE</em> 通过 <em>64</em> 字节的 <em>write-combined MMIO</em> 传输。</p>
+</blockquote>
 <p>根据 <em>figure 4</em> 可以看出 <em>BlueFlame</em> 只使用 <em>MMIO</em>，而 <em>Doorbell</em> 仅在初始时使用很小量的 <em>MMIO</em>。根据这一前提，给出两种优化方法：</p>
 <ol>
 <li><p><em><strong>Doorbell batching</strong></em><br>顾名思义，即一次 <em>Doorbell</em>，多个 <em>WQE</em>。具体落实到编程上，是使用 <code>ibv_post_send()</code> 或 <code>ibv_post_recv()</code> 发送 <em>WQE</em> 的链表，而非一个一个发送。</p>
@@ -72,4 +75,4 @@
 <li><p><strong>对于 <em>RDMA Write</em>，<em>CIB</em> 网卡能承受 <em>CPU WQE</em> 插入峰值，且未发生缓存未命中</strong>。<br>另外，可能是因为 <em>RDMA Read</em> 相比于 <em>RDMA Write</em> 需要额外的网卡操作，所以这一结论在 <em>RDMA Read</em> 上不正确。</p>
 </li>
 </ul>
-</div></article></div></main><footer><div class="paginator"></div><div class="copyright"><p>&copy; 2021 <a target="_blank" rel="noopener" href="https://github.com/bigwhite37">bigwhite37</a>.<br>Powered by <a href="https://hexo.io/" target="_blank">Hexo</a> &amp; <a href="https://github.com/Dreyer/hexo-theme-artemis" target="_blank">Artemis</a>.</p></div></footer></div></body></html>
+</div></article></div></main><footer><div class="paginator"><a class="prev" href="/2021/04/08/Maintaining-the-Time-in-a-Distributed-System/">prev</a></div><div class="copyright"><p>&copy; 2021 <a target="_blank" rel="noopener" href="https://github.com/bigwhite37">bigwhite37</a>.<br>Powered by <a href="https://hexo.io/" target="_blank">Hexo</a> &amp; <a href="https://github.com/Dreyer/hexo-theme-artemis" target="_blank">Artemis</a>.</p></div></footer></div></body></html>
