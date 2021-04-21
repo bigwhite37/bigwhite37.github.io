@@ -1,0 +1,54 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="X-UA-Compatible" content="IE=edge"><title>[笔记] Huge pages part 3 (Administration) | </title><meta name="description" content="[笔记] Huge pages part 3 (Administration) - bigwhite37"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="/favicon.png"><link rel="stylesheet" href="/css/theme.css"><link rel="search" type="application/opensearchdescription+xml" href="/atom.xml" title=""><!-- hexo injector head_end start -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.12.0/dist/katex.min.css">
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/hexo-math@4.0.0/dist/style.css">
+<!-- hexo injector head_end end --><meta name="generator" content="Hexo 5.4.0"><link rel="alternate" href="/atom.xml" title="" type="application/atom+xml">
+</head><body><div class="wrap"><header><h1 class="branding"><a href="/" title=""></a></h1><ul class="nav nav-list"><li class="nav-list-item"><a class="nav-list-link" href="/" target="_self">HOME</a></li><li class="nav-list-item"><a class="nav-list-link" href="/archives" target="_self">ARCHIVES</a></li><li class="nav-list-item"><a class="nav-list-link" href="https://github.com/bigwhite37" target="_blank">GITHUB</a></li><li class="nav-list-item"><a class="nav-list-link" href="/atom.xml" target="_self">RSS</a></li><li class="nav-list-item"><a class="nav-list-link" href="/about" target="_self">ABOUT</a></li></ul></header><main class="container"><div class="post"><article class="post-block"><h1 class="post-title">[笔记] Huge pages part 3 (Administration)</h1><div class="post-info"><a></a>2021-04-20</div><div class="post-content"><blockquote>
+<p>原文：</p>
+<p><a target="_blank" rel="noopener" href="https://lwn.net/Articles/376606/"><em>Huge pages part 3: Administration</em></a></p>
+</blockquote>
+<p>使用 <em>hugetlbfs</em> 仅需挂载相关的文件系统，而使用共享内存则需要额外的调整，且必须 <em>allocate huge page</em>。<em>hugepage</em> 可以作为在系统生命周期早期分配的 <em>pool</em> 的一部分，也可以是动态增长的 <em>pool</em> 的一部分。</p>
+<h2 id="1-Identifying-Available-Page-Sizes"><a href="#1-Identifying-Available-Page-Sizes" class="headerlink" title="1 Identifying Available Page Sizes"></a>1 <em>Identifying Available Page Sizes</em></h2><p>内核自 <em>2.6.27</em> 起已经支持多种 <em>huge page size</em>，前提是硬件支持。在 <code>/sys/kernel/mm/hugepages</code> 里每个 <em>size</em> 都有一个目录，默认 <em>size</em> 位于 <code>/proc/meminfo</code> 里的 <code>Hugepagesize</code> 项。</p>
+<p>默认 <em>huge page size</em> 很重要。虽然 <em>hugetlbfs</em> 可以在挂载时指定 <em>page size</em>，但对于共享内存或 <code>MAP_HUGETLB</code> 而言则无该选项。这对在 <em>AMD</em> 上使用 <em>1G</em> 页或在 <em>Power 5+</em> 及后续版本上使用 <em>16G</em> 页而言是至关重要的。</p>
+<p><em>libhugetlbfs</em> 有两种方式验证 <em>huge page size</em>：</p>
+<ol>
+<li><code>pagesize -H</code> 可打印出可用的 <em>huge page size</em>，<code>-a</code> 列出所有可用的 <em>page size</em></li>
+<li>上述两种方式等同于调用 <code>gethugepagesizes()</code> 和 <code>getpagesizes()</code></li>
+</ol>
+<h2 id="2-Huge-Page-Pool"><a href="#2-Huge-Page-Pool" class="headerlink" title="2 Huge Page Pool"></a>2 <em>Huge Page Pool</em></h2><p>由于不能 <em>swap huge page</em>，所以默认不分配任何 <em>page</em>，因此 <em>pool</em> 必须配置为静态或动态大小。静态大小即预分配 <em>huge page</em> 的数量，并保证其可用于应用程序。</p>
+<p>有几种方式可以设置 <em>static pool size</em>。第一种为配置内核 <em>boot</em> 参数 <code>hugepages=</code>。如果有多个 <em>huge page size</em>，则必须联合使用 <code>hugepagesz=</code> 和 <code>hugepages=</code>，详见 <em>Documentation/kernel-parameters</em>。下例为在 <em>Power 5+</em> 上配置多个 <em>huge page size</em>：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hugepagesz&#x3D;64k hugepages&#x3D;128 hugepagesz&#x3D;16M hugepages&#x3D;4</span><br></pre></td></tr></table></figure>
+
+<p>第二种方法是默认 <em>huge page pool size</em> 可以通过 <code>vm.nr_hugepages</code> 设置。</p>
+<p>第三种方法是通过 <em>sysfs</em> 配置，在 <code>/sys/kernel/mm/hugepages</code> 里配置 <code>nr_hugepages</code> 字段。</p>
+<p>提前确定合适的 <em>huge page size</em> 是不现实的。因而可以通过 <code>vm.nr_overcommit_hugepages</code> 配置相对于常驻内存的 <em>huge page</em> 而言，最大可额外分配的 <em>huge page</em>。当 <em>huge page pool</em> 不足以应对请求申请的 <em>huge page</em> 时，会尝试额外分配 <em>huge page</em>，直到数量达到 <code>nr_overcommit_hugepages</code>。如果分配失败了，结果就是 <code>mmap()</code> 失败，避免了缺页异常。</p>
+<p>使用 <code>hugeadm</code> 配置 <em>pool</em> 很简单。<code>--pool-pages-min</code> 指定最小可用的 <em>huge page</em> 数量。<code>--pool-pages-max</code> 指定系统中可存在的最大 <em>huge page</em> 数量（静态或动态）。</p>
+<p>下例给出 <em>x86</em> 上配置 <em>4MB</em> <em>page pool</em>：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">$ hugeadm --pool-pages-min 4M:32M</span><br><span class="line">$ hugeadm --pool-pages-max 4M:64M</span><br><span class="line">$ hugeadm --pool-list</span><br><span class="line">        Size  Minimum  Current  Maximum  Default</span><br><span class="line">    4194304        8        8       16        *</span><br></pre></td></tr></table></figure>
+
+<h2 id="3-Mounting-HugeTLBFS"><a href="#3-Mounting-HugeTLBFS" class="headerlink" title="3 Mounting HugeTLBFS"></a>3 <em>Mounting HugeTLBFS</em></h2><p>在 <em>Power 5+</em> 上挂载 <em>hugetlbfs</em>：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">$ mount -t hugetlbfs /mnt/hugetlbfs-default</span><br><span class="line">$ mount -t hugetlbfs /mnt/hugetlbfs-64k -o pagesize=64K</span><br></pre></td></tr></table></figure>
+
+<p><code>hugeadm</code> 提供了一些参数配置挂载点的权限：</p>
+<ul>
+<li><p><code>--create-mounts</code><br>在 <code>/var/lib/hugetlbfs</code> 下为每个可用的 <em>huge page size</em> 创建挂载点</p>
+</li>
+<li><p><code>--create-user-mounts &lt;user&gt;</code><br>在 <code>/var/lib/hugetlbfs/&lt;user&gt;</code> 下就每个可用的 <em>huge page size</em> 为 <em>&lt;user&gt;</em> 创建挂载点</p>
+</li>
+<li><p><code>--create-group-mounts &lt;group&gt;</code><br>在 <code>/var/lib/hugetlbfs/&lt;group&gt;</code> 下就每个可用的 <em>huge page size</em> 为 <em>&lt;group&gt;</em> 创建挂载点</p>
+</li>
+<li><p><code>--create-global-mounts</code><br>在 <code>/var/lib/hugetlbfs/global</code> 下为每个可用的 <em>huge page size</em> 创建挂载点</p>
+</li>
+</ul>
+<h3 id="3-1-Quotas"><a href="#3-1-Quotas" class="headerlink" title="3.1 Quotas"></a>3.1 <em>Quotas</em></h3><p><em>quota</em> 是 <em>hugetlbfs</em> 较少用到的 <em>feature</em>，其用于限制文件系统实例可用的 <em>huge page</em>，即便是系统中 <em>huge page</em> 富足。该 <em>feature</em> 使用场景主要是限制 <em>user</em> 或 <em>group</em> 可用的 <em>huge page</em>。目前 <code>hugeadm</code> 还不支持该 <em>feature</em>，可以通过在挂载是指定 <code>size=</code> 配置。</p>
+<h2 id="4-Enabling-Shared-Memory"><a href="#4-Enabling-Shared-Memory" class="headerlink" title="4 Enabling Shared Memory"></a>4 <em>Enabling Shared Memory</em></h2><p>使用共享内存时，有两个可以配置的地方。一个是 <code>kernel.shamax</code>（位于 <code>/etc/sysctl.conf</code>，或暂时位于 <code>/proc/sys/kernel/shammax</code>）。第二个是 <code>vm.hugetlb_shm_group</code>，其存储着允许创建共享内存段的 <em>group ID (GID)<em>。比如，以用户 <em>JVM</em> 允许 <em>JVM</em> 实例，使用共享内存，</em>UID</em> 为 <em>1500</em>，<em>GID</em> 为 <em>3000</em>，则 <code>vm.hugetlb_shm_group</code> 值为 <em>3000</em>。</p>
+<p><code>hugeadm</code> 可以分别使用 <code>--set-recommended-shmmax</code> 和 <code>--set-shm-group</code> 配置这两项。由于使用值是基于 <em>huge page pool size</em> 计算的，所以会在配置 <em>pool</em> 后再配置该两项。</p>
+<h2 id="5-Huge-Page-Allocation-Success-Rates"><a href="#5-Huge-Page-Allocation-Success-Rates" class="headerlink" title="5 Huge Page Allocation Success Rates"></a>5 <em>Huge Page Allocation Success Rates</em></h2><p>如果 <em>huge page pool</em> 是在 <em>boot-time</em> 静态分配的，则本节内容与这些 <em>huge page</em> 无关（因为它们一定存存在）。当系统需要在其生命周期内动态创建 <em>huge page</em> 时，可能会因为 <em>external fragmentation</em> 而无法创建。有两种方式可以控制 <em>external fragmentation</em>，增加分配成功率。</p>
+<blockquote>
+<p><em>external fragmentation</em></p>
+<p>当系统中可用内存总量足够应对分配请求，但却会因为没有足够大的连续内存而 <em>allocate</em> 失败</p>
+</blockquote>
+<p>第一种是增大 <code>vm.min_free_kbytes</code>，有助于内核的 <em>fragmentation-avoidance</em> 机制。其值依架构、<em>NUMA</em> 节点数量和 <em>huge page size</em> 而定，不过使用 <code>hugeadm --set-recommended-min_free_kbytes</code> 可帮助计算该值。如有必要，设置该值的效果可由 <code>trace_mm_page_alloc_extfrag</code> <em>tracepoint</em> 和 <code>ftrace</code> 观测到。</p>
+<p>静态 <em>pool</em> 可以设置其可用 <em>huge page</em> 的下界，但上界却无法保证。比如分别请求最小 <em>1G</em> 的 <em>pool</em> 和最大 <em>8G</em> 的 <em>pool</em> 时可能因为碎片其真实上界为 <em>4G</em>。</p>
+<p>如果需要确定的上界，可在 <em>boot time</em> 时设置 <code>kernelcore=</code> 或 <code>movablecore=</code> 创建 <em>memory partition</em>。这两个选项在 <code>/proc/zoneinfo</code> 或 <code>/proc/buddyinfo</code> 下创建 <em>Movable zone</em>。只有可以由内核迁移或回收的 <em>page</em> 才能出现在该 <em>zone</em>。<em>huge page</em> 默认不从该 <em>zone</em> 分配，但可以通过使能 <code>vm.hugepages_treat_as_movable</code> 或 <code>hugeadm --enable-zone-movable</code> 修改。</p>
+</div></article></div></main><footer><div class="paginator"><a class="next" href="/2021/04/19/Huge-pages-part-2-Interfaces-%E7%AC%94%E8%AE%B0/">next</a></div><div class="copyright"><p>&copy; 2021 <a target="_blank" rel="noopener" href="https://github.com/bigwhite37">bigwhite37</a>.<br>Powered by <a href="https://hexo.io/" target="_blank">Hexo</a> &amp; <a href="https://github.com/Dreyer/hexo-theme-artemis" target="_blank">Artemis</a>.</p></div></footer></div></body></html>
