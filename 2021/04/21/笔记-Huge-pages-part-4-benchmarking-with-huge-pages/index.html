@@ -1,0 +1,105 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="X-UA-Compatible" content="IE=edge"><title>[笔记] Huge pages part 4: benchmarking with huge pages | </title><meta name="description" content="[笔记] Huge pages part 4: benchmarking with huge pages - bigwhite37"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="/favicon.png"><link rel="stylesheet" href="/css/theme.css"><link rel="search" type="application/opensearchdescription+xml" href="/atom.xml" title=""><!-- hexo injector head_end start -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.12.0/dist/katex.min.css">
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/hexo-math@4.0.0/dist/style.css">
+<!-- hexo injector head_end end --><meta name="generator" content="Hexo 5.4.0"><link rel="alternate" href="/atom.xml" title="" type="application/atom+xml">
+</head><body><div class="wrap"><header><h1 class="branding"><a href="/" title=""></a></h1><ul class="nav nav-list"><li class="nav-list-item"><a class="nav-list-link" href="/" target="_self">HOME</a></li><li class="nav-list-item"><a class="nav-list-link" href="/archives" target="_self">ARCHIVES</a></li><li class="nav-list-item"><a class="nav-list-link" href="https://github.com/bigwhite37" target="_blank">GITHUB</a></li><li class="nav-list-item"><a class="nav-list-link" href="/atom.xml" target="_self">RSS</a></li><li class="nav-list-item"><a class="nav-list-link" href="/about" target="_self">ABOUT</a></li></ul></header><main class="container"><div class="post"><article class="post-block"><h1 class="post-title">[笔记] Huge pages part 4: benchmarking with huge pages</h1><div class="post-info"><a></a>2021-04-21</div><div class="post-content"><blockquote>
+<p>原文：</p>
+<p><a target="_blank" rel="noopener" href="https://lwn.net/Articles/378641/"><em>Huge pages part 4: benchmarking with huge pages</em></a></p>
+</blockquote>
+<p><em>STREAM</em> 是 <em>memory-intensive benchmark</em>，其引用模式具有较差的时间和空间局部性，所以当 <em>TLB miss</em> 减少时，结果会更好。<em>Sysbench</em> 是一款简单的 <em>OnLine Transaction Processing (OLTP) benchmark</em>，可作为 <em>Oracle</em>、<em>MySQL</em> 或 <em>PostgreSQL</em> 的后端。虽然有更好的 <em>OLTP benchmark</em>，但 <em>Sysbench</em> 简单且结果可靠。<em>SpecCPU 2006</em> 是适用于 <em>high-performance computing (HPC)</em> 的 <em>computational benchmark</em>，而 <em>SpecJVM benchmark</em> 则用于 <em>Java</em> 应用的 <em>basic class</em>。</p>
+<h2 id="1-Machine-Configuration"><a href="#1-Machine-Configuration" class="headerlink" title="1 Machine Configuration"></a>1 <em>Machine Configuration</em></h2><p>用于此次测试的机器为 <em>Terrasoft Powerstation</em>：</p>
+<table>
+<thead>
+<tr>
+<th>-</th>
+<th>-</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><em><strong>Architectire</strong></em></td>
+<td><em>PPC64</em></td>
+</tr>
+<tr>
+<td><em><strong>CPU</strong></em></td>
+<td><em>PPC970MP with altivce</em></td>
+</tr>
+<tr>
+<td><em><strong>CPU Frequency</strong></em></td>
+<td><em>2.5GHz</em></td>
+</tr>
+<tr>
+<td><em><strong># Physical CPUs</strong></em></td>
+<td><em>2 (4 cores)</em></td>
+</tr>
+<tr>
+<td><em><strong>L1 Cache per core</strong></em></td>
+<td><em>32K Data, 64K Instruction</em></td>
+</tr>
+<tr>
+<td><em><strong>L2 Cache per core</strong></em></td>
+<td><em>1024K Unified</em></td>
+</tr>
+<tr>
+<td><em><strong>L3 Cache per socket</strong></em></td>
+<td><em>N/a</em></td>
+</tr>
+<tr>
+<td><em><strong>Main Memory</strong></em></td>
+<td><em>8GB</em></td>
+</tr>
+<tr>
+<td><em><strong>Mainboard</strong></em></td>
+<td><em>Machine model specific</em></td>
+</tr>
+<tr>
+<td><em><strong>Superpage Size</strong></em></td>
+<td><em>16MB</em></td>
+</tr>
+<tr>
+<td><em><strong>Machine Model</strong></em></td>
+<td><em>Terrasoft Powerstation</em></td>
+</tr>
+</tbody></table>
+<p>配置 <em>huge page</em> 命令如下：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">$ hugeadm --create-global-mounts</span><br><span class="line">$ hugeadm --pool-pages-max DEFAULT:8G</span><br><span class="line">$ hugeadm --set-recommended-min_free_kbytes</span><br><span class="line">$ hugeadm --set-recommended-shmmax</span><br><span class="line">$ hugeadm --pool-pages-min DEFAULT:2048MB</span><br><span class="line">$ hugeadm --pool-pages-max DEFAULT:8192MB</span><br></pre></td></tr></table></figure>
+
+<h2 id="2-STREAM"><a href="#2-STREAM" class="headerlink" title="2 STREAM"></a>2 <em>STREAM</em></h2><p><a target="_blank" rel="noopener" href="http://www.cs.virginia.edu/stream/"><em>STREAM</em></a> <em>[mccalpin07]</em> 是 <em>synthetic memory bandwidth benchmark</em>，用于测量四类长向量操作的性能：<em>Copy</em><br>、<em>Scale</em>、<em>Add</em> 和 <em>Triad</em>。其可用于测量平均内存访问时间内浮点数的操作。简单来说，带宽越大越好。</p>
+<blockquote>
+<p><a target="_blank" rel="noopener" href="https://www.cs.umd.edu/~meesh/cmsc411/website/projects/morebenchmarks/types.html"><em>Different Types of Benchmarks</em></a></p>
+<p><em>Synthetic benchmarks are created by combining basic computer functions in proportions that developers feel will yield an indicative measure of the performance capabilities of the machine under test. These benchmarks try to match the average frequency of operations and operands of a large set of programs. Functions included in synthetic benchmarks are usually created artificially to match an average execution profile and this impairs their credibility.</em></p>
+<p><em>Synthetic benchmarks are component-level benchmarks, and they evaluate a particular capability of a subsystem. For example, a disk subsystem performance benchmark may combine a series of basic seek, read, and write operations involving varying numbers of disk blocks of varying sizes.</em></p>
+</blockquote>
+<p>我们使用 <em>C</em> 版本的 <em>benchmark</em>，分配了 <em>3</em> 个静态数组用于计算。修改后的 <em>benchmark</em> 使用 <code>malloc()</code> 和 <code>get_hugepage_region()</code> 具有相似的结果。</p>
+<p><em>benchmark</em> 有两个参数：<em>N</em>（数组的大小）和 <em>OFFSET</em> （填充数组末尾的元素数量）。<em>N</em> 的范围用于生成 <em>128K</em> 到 <em>3GB</em> 大小的 <em>workload</em>。对于所选的 <em>N</em>，<em>benchmark</em> 运行 <em>10</em> 次取平均值。<em>benchmark</em> 对缓存的放置很敏感，不同架构的优化布局也不同；如果 <em>10</em> 次迭代的标准偏差超过了吞吐量的 <em>5%<em>，则增加 <em>OFFSET</em>，在数组之间添加一个缓存行大小的填充，并重新运行 <em>N</em> 值的 <em>benchmark</em>。只有当总 <em>workload</em> 的大小接近 <em>L1</em>、</em>L2</em> 或所有缓存的总和时，才会出现高标准差。</p>
+<p><em>benchmark</em> 通过寄存器和缓存避免数据数据重用。因此，从 <em>huge page</em> 中获益是因为更少的缺页，以及 <em>TLB miss</em> 减少带来的较少的性能提升。</p>
+<p>为使用 <em>huge page</em>，<em>benchmark</em> 编译命令如下：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">$ gcc -DN=1864135 -DOFFSET=0 -O2 -m64                    \</span><br><span class="line">    -B /usr/share/libhugetlbfs -Wl,--hugetlbfs-align     \</span><br><span class="line">    -Wl,--library-path=/usr/lib                          \</span><br><span class="line">    -Wl,--library-path=/usr/lib64                        \</span><br><span class="line">    -lhugetlbfs stream.c                                 \</span><br><span class="line">    -o stream</span><br><span class="line"></span><br><span class="line"><span class="comment"># Test launch of benchmark</span></span><br><span class="line">$ hugectl --text --data --no-preload ./stream</span><br></pre></td></tr></table></figure>
+
+<p>下面是测试结果可视化，在 <em>X86</em> 或 <em>X86-64</em> 上，使用 <em>huge page</em> 和不使用的差异会更小，约为 *0% ~ 4%*。</p>
+<p><img src="/2021/04/21/%E7%AC%94%E8%AE%B0-Huge-pages-part-4-benchmarking-with-huge-pages/stream_1.png"><br><img src="/2021/04/21/%E7%AC%94%E8%AE%B0-Huge-pages-part-4-benchmarking-with-huge-pages/stream_2.png"><br><img src="/2021/04/21/%E7%AC%94%E8%AE%B0-Huge-pages-part-4-benchmarking-with-huge-pages/stream_3.png"><br><img src="/2021/04/21/%E7%AC%94%E8%AE%B0-Huge-pages-part-4-benchmarking-with-huge-pages/stream_4.png"></p>
+<h2 id="3-SysBench"><a href="#3-SysBench" class="headerlink" title="3 SysBench"></a>3 <em>SysBench</em></h2><p>这里，我们使用 <em>Sysbench 0.4.12</em> 和 <em>Postgres 8.4.0</em> 进行测试。</p>
+<p><em>Postgres</em> 配置使用 <em>756MB</em> 的共享内存，有效缓存 <em>150MB</em>，最大 <em>6 * NR_CPUs</em> 个客户端连接。关闭了 <code>update_process_title</code> 参数可以获得较小的优化。关闭了 <em>checkout</em>、<em>fsync</em>、<em>log</em> 和 <em>synchronise</em> 以避免受 <em>IO</em> 影响。运行命令如下：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hugectl --shm bin/pg_ctl -D `<span class="built_in">pwd</span>`/data -l logfile start</span><br></pre></td></tr></table></figure>
+
+<p>测试用的 <em>table</em> 为 <em>1</em> 千万行的只读数据。运行测试时，访问数据库的客户端数量是系统中 <em>CPU</em> 核数的 <em>1</em> 到 <em>4</em> 倍。对于每个线程计数，会运行多次测试，直到至少完成 <em>5</em> 次迭代，并且有 <em>99%</em> 的置信水平（估计的平均值距离真实平均值的 <em>2%</em> 之内）。在实践中，由于 <em>I/O</em> 增加和第一次运行期间发生的缺页，我们忽略第一次迭代。</p>
+<p>与 <em>STREAM</em> 不同，下图的测试结果在 <em>x86</em> 和 <em>x86-64</em> 上也相似。<em>STREAM</em> 引用局部性差，因此缓存是影响性能的重要因素。而 <em>SysBench</em> 的引用局部性好于 <em>STREAM</em>，因此在不同架构间应该能获得相似的性能。</p>
+<p><img src="/2021/04/21/%E7%AC%94%E8%AE%B0-Huge-pages-part-4-benchmarking-with-huge-pages/sysbench_1.png"></p>
+<h2 id="4-SpecCPU-2006"><a href="#4-SpecCPU-2006" class="headerlink" title="4 SpecCPU 2006"></a>4 <em>SpecCPU 2006</em></h2><p><a target="_blank" rel="noopener" href="https://www.spec.org/cpu2006/"><em>SpecCPU 2006 v1.1</em></a> 是标准化的 <em>CPU-intensive benchmark</em>，用于衡量 <em>HPC</em> 的性能，同时也可用于测试内存子系统。测试时，指定 <code>--reportable</code> 选项，以 <em>test</em>、<em>train</em> 及三种 <em>ref sets</em> 作为输入数据。三种测试分别比较了 <em>base page</em>、仅用 <em>heap</em> 作为后端的 <em>huge page</em> 及以 <em>text</em>、<em>data</em> 和 <em>heap</em> 作为后端的 <em>huge page</em>。</p>
+<p>以下命令以 <em>heap</em> 作为 <em>huge page</em> 后端运行：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hugectl --heap runspec ...</span><br></pre></td></tr></table></figure>
+
+<p>下面是测试结果，以 <em>huge page</em> 的结果作为基准。</p>
+<p><em><strong>(Integer)</strong></em></p>
+<p><img src="/2021/04/21/%E7%AC%94%E8%AE%B0-Huge-pages-part-4-benchmarking-with-huge-pages/speccpu_1.png"></p>
+<p><em><strong>(Float)</strong></em></p>
+<p><img src="/2021/04/21/%E7%AC%94%E8%AE%B0-Huge-pages-part-4-benchmarking-with-huge-pages/speccpu_2.png"></p>
+<h2 id="5-SpecJVM-JVM-General"><a href="#5-SpecJVM-JVM-General" class="headerlink" title="5 SpecJVM (JVM/General)"></a>5 <em>SpecJVM (JVM/General)</em></h2><blockquote>
+<p><em>Java is used in an increasing number of scenarios, including real time systems, and it dominates in the execution of business-logic related applications. Particularly within application servers, the Java Virtual Machine (JVM) uses large quantities of virtual address space that can benefit from being backed by huge pages. <a target="_blank" rel="noopener" href="http://www.specbench.org/jvm2008/">SpecJVM 2008</a> is a benchmark suite for Java Runtime Environments (JRE). According to the documentation, the intention is to reflect the performance of the processor and memory system with a low dependence on file or network I/O. Crucially for HPC, it includes <a target="_blank" rel="noopener" href="http://math.nist.gov/scimark2/">SCIMark</a>, which is a Java benchmark for scientific and numerical computing.</em></p>
+<p><em>The 64-bit version of IBM Java Standard Edition Version 6 SP 3 was used, but support for huge pages is available in other JVMs. The JVM was configured to use a maximum of 756MB for the heap. Unlike the other benchmarks, the JVM is huge-page-aware and uses huge-page-backed shared memory segments when -Xlp is specified. An example invocation of the benchmark is as follows.</em></p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ java -Xlp -Xmx756m -jar SPECjvm2008.jar 120 300 --parseJvmArgs -i 1 --peak</span><br></pre></td></tr></table></figure>
+
+<p><em>This plot shows the performance results running the full range of SpecJVM tests. The results are interesting as they show performance gains were not universal, with the serial benchmark being spectacularly poor. Despite this, performance was improved on average by 4.43% with very minimal work required on behalf of the administrator.</em></p>
+</blockquote>
+<p><img src="/2021/04/21/%E7%AC%94%E8%AE%B0-Huge-pages-part-4-benchmarking-with-huge-pages/specjvm.png"></p>
+</div></article></div></main><footer><div class="paginator"><a class="next" href="/2021/04/20/%E7%AC%94%E8%AE%B0-Huge-pages-part-3-Administration/">next</a></div><div class="copyright"><p>&copy; 2021 <a target="_blank" rel="noopener" href="https://github.com/bigwhite37">bigwhite37</a>.<br>Powered by <a href="https://hexo.io/" target="_blank">Hexo</a> &amp; <a href="https://github.com/Dreyer/hexo-theme-artemis" target="_blank">Artemis</a>.</p></div></footer></div></body></html>
