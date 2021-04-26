@@ -6,7 +6,7 @@
   <link href="http://example.com/atom.xml" rel="self"/>
   
   <link href="http://example.com/"/>
-  <updated>2021-04-22T03:06:01.292Z</updated>
+  <updated>2021-04-26T08:46:43.924Z</updated>
   <id>http://example.com/</id>
   
   <author>
@@ -15,6 +15,26 @@
   </author>
   
   <generator uri="https://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>Persistent Memory Mode</title>
+    <link href="http://example.com/2021/04/26/Persistent-Memory-Mode/"/>
+    <id>http://example.com/2021/04/26/Persistent-Memory-Mode/</id>
+    <published>2021-04-26T08:44:44.000Z</published>
+    <updated>2021-04-26T08:46:43.924Z</updated>
+    
+    <content type="html"><![CDATA[<p><a href="https://itpeernetwork.intel.com/intel-optane-dc-persistent-memory-operating-modes/#gs.z4qu1o"><em>Intel® Optane™ DC Persistent Memory Operating Modes Explained</em></a> 说明在 <em>memory mode</em> 里，<em>DRAM</em> 将作为缓存，<em>PMEM</em> 则作为内存，有 <em>CPU</em> 内存控制器进行访问。相反，在 <em>app direct mode</em> 里，<em>OS</em> 明确知道哪个是 <em>DRAM</em>，哪个是 <em>PMEM</em>。</p><blockquote><p><em>For example, a platform with 1.536 TB of Intel® Optane™ DC Persistent Memory and 192 GB of DRAM would register with the OS as 1.728 TB of total memory in App Direct, but only appear as 1.536 TB in Memory Mode.</em></p></blockquote><p>而在 <a href="https://lwn.net/Articles/777212/"><em>Persistent memory for transient data</em></a> 给出了 <em>memory mode</em> 的缺点：</p><blockquote><p><em>The fact that the cache is direct-mapped can make contention problems worse. Unlike an associative cache, a direct-mapped cache only has one slot available for any given memory address; if the data of interest is not in that particular slot, it cannot be in the cache at all. Making effective use of such an arrangement requires a memory-allocation pattern that will spread accesses across the entire cache. Otherwise, an applications memory may end up mapped to a relatively small number of cache slots and it will end up contending with itself — and running slowly.</em></p></blockquote><p>且在之后给出了一些试图优化该性能问题的 <em>patch set</em>，但貌似还没合进去。</p>]]></content>
+    
+    
+      
+      
+    <summary type="html">&lt;p&gt;&lt;a href=&quot;https://itpeernetwork.intel.com/intel-optane-dc-persistent-memory-operating-modes/#gs.z4qu1o&quot;&gt;&lt;em&gt;Intel® Optane™ DC Persistent M</summary>
+      
+    
+    
+    
+    
+  </entry>
   
   <entry>
     <title>[笔记] Huge pages part 4: benchmarking with huge pages</title>
