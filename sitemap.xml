@@ -2,6 +2,13 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   
   <url>
+    <loc>http://example.com/2021/04/27/Error-Recovery-in-Persistent-Memory-Applications/</loc>
+    
+    <lastmod>2021-04-27</lastmod>
+    
+  </url>
+  
+  <url>
     <loc>http://example.com/2021/04/26/Persistent-Memory-Mode/</loc>
     
     <lastmod>2021-04-26</lastmod>
@@ -16,14 +23,14 @@
   </url>
   
   <url>
-    <loc>http://example.com/2021/04/20/%E7%AC%94%E8%AE%B0-Huge-pages-part-3-Administration/</loc>
+    <loc>http://example.com/2021/04/19/Huge-pages-part-2-Interfaces-%E7%AC%94%E8%AE%B0/</loc>
     
     <lastmod>2021-04-21</lastmod>
     
   </url>
   
   <url>
-    <loc>http://example.com/2021/04/19/Huge-pages-part-2-Interfaces-%E7%AC%94%E8%AE%B0/</loc>
+    <loc>http://example.com/2021/04/20/%E7%AC%94%E8%AE%B0-Huge-pages-part-3-Administration/</loc>
     
     <lastmod>2021-04-21</lastmod>
     
@@ -60,7 +67,7 @@
 
   <url>
     <loc>http://example.com/</loc>
-    <lastmod>2021-04-26</lastmod>
+    <lastmod>2021-04-27</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
@@ -68,14 +75,14 @@
   
   <url>
     <loc>http://example.com/tags/papers/</loc>
-    <lastmod>2021-04-26</lastmod>
+    <lastmod>2021-04-27</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
   </url>
   
   <url>
     <loc>http://example.com/tags/RDMA/</loc>
-    <lastmod>2021-04-26</lastmod>
+    <lastmod>2021-04-27</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.6</priority>
   </url>
